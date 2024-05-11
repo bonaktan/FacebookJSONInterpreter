@@ -1,5 +1,4 @@
 # Facebook JSON Interpreter
----------------------------
 ## Milestones
 - [ ] Build Logic for Server-Side JSON Interpretation
 - [ ] Build UI for Client-Side
