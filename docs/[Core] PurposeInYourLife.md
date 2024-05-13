@@ -9,6 +9,7 @@ As this is a very complex undertaking, some structures need to be considered to 
 ## Server Side
 ### Toolings
 - Hosted using a very lightweight server (bottle should be fine)
+- will use ws protocol (gevent) for serv-client comms
 
 ### Purpose
 - host the webserver on localhost:6969
@@ -20,6 +21,7 @@ As this is a very complex undertaking, some structures need to be considered to 
 ## Client Side
 ### Toolings
 - Using React for the rendering shits
+- will use ws protocol for serv-client comms
 
 ### Purpose
 - beautifully display shits that server sends to you
