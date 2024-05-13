@@ -8,7 +8,7 @@ As this is a very complex undertaking, some structures need to be considered to 
 
 ## Server Side
 ### Toolings
-- Hosted using a very lightweight server (http.server should be fine, no need to go overkill with django/flask)
+- Hosted using a very lightweight server (bottle should be fine)
 
 ### Purpose
 - host the webserver on localhost:6969
