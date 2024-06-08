@@ -6,8 +6,9 @@ import usePythonSocketBare from '../api/websocket';
  * */
 function FacebookJSONInterpreter() {
     // eslint-disable-next-line no-unused-vars
-    const {ready, socket, send} = usePythonSocketBare();
-    return <p>{''+ready}</p>;
+    const {handleClickSendMessage, readyState} = usePythonSocketBare();
+    handleClickSendMessage('Hello');
+    return <p>{''+readyState}</p>;
 }
 
 export {FacebookJSONInterpreter};

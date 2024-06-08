@@ -21,6 +21,7 @@
 from bottle import Bottle, static_file, abort, request
 from bottle_websocket import GeventWebSocketServer, websocket
 
+# Webserver Side
 app = Bottle()
 
 @app.route('/')
