@@ -18,48 +18,50 @@
 #      =====`-.____`.___ \_____/___.-`___.-'=====
 #                        `=---='
 
-from bottle import Bottle, static_file, abort, request
-from bottle_websocket import GeventWebSocketServer, websocket
-
+from bottle import Bottle, static_file, request, run, response, request, HTTPError
+import json
+import re
+import logging
+import datetime
+from pathlib import Path
 # Webserver Side
+
 app = Bottle()
+
+def enable_cors(fn):
+    def _enable_cors(*args, **kwargs):
+        # set CORS headers
+        response.headers['Access-Control-Allow-Origin'] = '*' # WARNING: can be a security risk, please merge server and client asap
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token'
+        if request.method != 'OPTIONS':
+            # actual request; reply with the actual response
+            return fn(*args, **kwargs)
+    return _enable_cors
 
 @app.route('/')
 def home():
     return static_file('index.html', root='./build/')
 
-@app.get('/websocket', apply=[websocket])
-def WebsocketInterface(ws):
-    wsock = request.environ.get('wsgi.websocket')
-    if not wsock:
-        print('405')
-        abort(405, "Don't access /websocket using a browser, it's a WebSocket")
-    while True:
-        try:
-            message = wsock.receive()
-            if message == None: continue
-            print(message)
-            wsock.send("Your message was: %r" % message)
-        except WebSocketError:
-            break
-
 @app.route('/static/<filename:path>')
 def statics(filename): return static_file(filename, root='./build/static')
 
-# Main Engine, Entry = FacebookData(Path(path_to_rootfolder))
-import os
-import re
-import json
-import logging
-import datetime
-import jsonpickle
+@app.route('/api', method='POST')
+@enable_cors
+def api():
+    # maybe compensate for the cors * with an ip check????
+    clientRequest = json.loads(request.body.read())
+    if clientRequest == {}: return json.dumps({'communicationCheckstatus': True})
+    match clientRequest['requestType']:
+        case 'setFilePath':
+            global Data
+            if Data:
+                return HTTPError(405, "A FacebookData Object is already initialized.")
+    Data = FacebookData(Path(clientRequest['path']))
+    return clientRequest
+    # Main Engine Entry = FacebookData(Path(path_to_rootfolder))
 
-# from glob import glob
-from pathlib import Path
-
-from functools import partial
-
-
+Data = None
 class Template:
     class Folders:
         def __init__(self, logIdentity, *args, **kwargs):
@@ -211,7 +213,7 @@ class Messages(Template.Folders):
         # 2 types, archived, inbox
         self.archived = self.__parseMessageDirectory(
             "archived_threads"
-        ) + self.__parseMessageDirectory("message_requests")
+        ) + self.__parseMessageDirectory("filtered_threads")
         self.inbox = self.__parseMessageDirectory(
             "e2ee_cutover"
         ) + self.__parseMessageDirectory("inbox")
@@ -243,10 +245,4 @@ class FacebookExceptions:
     
     
 if __name__ == '__main__':
-    from gevent.pywsgi import WSGIServer
-    from geventwebsocket import WebSocketError
-    from geventwebsocket.handler import WebSocketHandler
-    server = WSGIServer(('127.0.0.1', 42069), app,
-                    handler_class=WebSocketHandler)
-    print("Access at http://%s:%s/websocket.html" % ('127.0.0.1', 42069))
-    server.serve_forever()
+    run(app, host='localhost', port=42069)
