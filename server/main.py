@@ -18,6 +18,8 @@
 #      =====`-.____`.___ \_____/___.-`___.-'=====
 #                        `=---='
 
+# this is all 1 file instead of a whole directory since i plan to literally merge EVERYTHING after compilation for release :3
+
 from bottle import Bottle, static_file, request, run, response, request, HTTPError
 import json
 import re
@@ -27,7 +29,11 @@ from pathlib import Path
 # Webserver Side
 
 app = Bottle()
+Data = None
 
+def returnData(returnType, **retData):
+    retData['returnType'] = returnType # NOTE: shall be validated
+    return json.dumps(retData)
 def enable_cors(fn):
     def _enable_cors(*args, **kwargs):
         # set CORS headers
@@ -35,7 +41,6 @@ def enable_cors(fn):
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token'
         if request.method != 'OPTIONS':
-            # actual request; reply with the actual response
             return fn(*args, **kwargs)
     return _enable_cors
 
@@ -51,17 +56,20 @@ def statics(filename): return static_file(filename, root='./build/static')
 def api():
     # maybe compensate for the cors * with an ip check????
     clientRequest = json.loads(request.body.read())
-    if clientRequest == {}: return json.dumps({'communicationCheckstatus': True})
+    if clientRequest == {}: return returnData('communicationCheck', status=True)
     match clientRequest['requestType']:
         case 'setFilePath':
             global Data
             if Data:
-                return HTTPError(405, "A FacebookData Object is already initialized.")
-    Data = FacebookData(Path(clientRequest['path']))
-    return clientRequest
+                return returnData(returnType="error", code=-401)
+            clientRequest['path'] = Path(clientRequest['path'])
+            if not clientRequest['path'].exists():
+                return returnData(returnType="error", code=-201)
+            Data = FacebookData(clientRequest['path'])
+            return returnData('setFilePath', code=0)
     # Main Engine Entry = FacebookData(Path(path_to_rootfolder))
 
-Data = None
+# Engine Version 1.0.0
 class Template:
     class Folders:
         def __init__(self, logIdentity, *args, **kwargs):
@@ -242,7 +250,6 @@ class FacebookExceptions:
         def __str__(self):
             return f"{self.message} ({self.directory})"
 
-    
-    
+
 if __name__ == '__main__':
     run(app, host='localhost', port=42069)
