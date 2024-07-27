@@ -20,7 +20,7 @@
 
 # this is all 1 file instead of a whole directory since i plan to literally merge EVERYTHING after compilation for release :3
 
-from bottle import Bottle, static_file, request, run, response, request, HTTPError
+from bottle import Bottle, static_file, request, run, response
 import json
 import re
 import logging
@@ -65,191 +65,273 @@ def api():
             clientRequest['path'] = Path(clientRequest['path'])
             if not clientRequest['path'].exists():
                 return returnData(returnType="error", code=-201)
-            Data = FacebookData(clientRequest['path'])
+            Data = FacebookData(clientRequest['path']) # we now have an entry point, now make it efficient
             return returnData('setFilePath', code=0)
     # Main Engine Entry = FacebookData(Path(path_to_rootfolder))
 
-# Engine Version 1.0.0
-class Template:
-    class Folders:
-        def __init__(self, logIdentity, *args, **kwargs):
-            # path definitions
-            self.path = self.Parent.rootPath / self.identity
-            if not self.path.is_dir():
-                raise NotADirectoryError(
-                    self.path, "Path given either does not exist or is a file."
-                )
-            self._setupLogHandlers(logIdentity)
+# Engine Version 1.1.0
+# Additions: Multiprocessing Support
 
-        def _setupLogHandlers(self, name):
-            self.logger = logging.getLogger(name)
-            self.Parent.logstreamer.setFormatter(self.Parent.logformatter)
+from dataclasses import dataclass  # noqa: E402
+class ItemTemplates:
+    @dataclass
+    class Data:
+        path: Path
+        # the rest tba
+    
+    @dataclass
+    class Media:
+        path: Path
+        mediaType: str
 
-            self.logger.setLevel(self.Parent.options["log"])
-            self.Parent.logstreamer.setLevel(self.Parent.options["log"])
+    class Conversation:
+        path: Path
+        name: str
+        isGroupChat: bool
+        Message: "ItemTemplates.ConvoMessage"
+        def __init__(self, path):
+            print(path)
+        
+        def load(self):
+            raise NotImplementedError('To be Done')
 
-        def __repr__(self):
-            return f"FacebookData(/{self.identity})"
+    @dataclass
+    class ConvoMessage: # this will be a linked list, btw
+        isMedia: bool
+        _prevMessage: "ItemTemplates.ConvoMessage"
+        _nextMessage: "ItemTemplates.ConvoMessage"
+        time: datetime
 
-    class Conversation(Folders):
-        def __init__(self, path, name, parent):
-            self.Parent = parent
-            self._setupLogHandlers("FacebookData.Activity.Messages.%s" % name)
+        @property
+        def prevMessage(self): return self._prevMessage
+        @property
+        def nextMessage(self): return self._nextMessage
+        @nextMessage.setter
+        def nextMessage(self, message):
+            # NOTE: sanitycheck, natamad pa ko iimplement :3
+            self._nextMessage = message
+    
+class Structures:
+    class Metadata:
+        path: Path
+        def __init__(self, path):
             self.path = path
-            self.internalName = name
-            self.audios = self.__getFiles(self.path / "audio")
-            self.files = self.__getFiles(self.path / "files")
-            self.gifs = self.__getFiles(self.path / "gifs")
-            self.photos = self.__getFiles(self.path / "photos")
-            self.videos = self.__getFiles(self.path / "videos")
-            self.jsonRaw = self.interpretJSONs(
-                tuple(
-                    self.path.glob("message_*.json"),
-                )
-            )
-            
-            # flags
-            self.participants = []
-            for _ in self.jsonRaw["participants"]:
-                self.participants.append(_["name"])
-            self.isGroupChat = True if len(self.participants) >= 3 else False
-            self.name = (
-                self.jsonRaw["title"]
-                if self.jsonRaw["title"] != ""
-                else self.internalName
-            )
-            self.messages = self.jsonRaw["messages"]
-            self.convoLinks = self.__extractURL()
-            self.logger.debug("Conversation with %s initialized", name)
+    class Messages:
+        path = 'your_facebook_activity/messages'
+        def __init__(self, path):
+            self.path = path / self.path
+            print(self.path)
 
-        def interpretJSONs(self, jsonpath):
-            with jsonpath[0].open(mode="rb") as jsondata:
-                data = json.loads(jsondata.read(), cls=Template.FacebookJSONDecoder)
-            if len(jsonpath) >= 2:
-                for i in jsonpath[1:]:
-                    with i.open(mode="rb") as jsondata:
-                        adddata = json.loads(
-                            jsondata.read(), cls=Template.FacebookJSONDecoder
-                        )
-                        data["messages"] += adddata["messages"]
-            return data
-
-        def __getFiles(self, path):
-            return list(path.glob("*")) if path.is_dir() else None
-
-        def __extractURL(self):
+            self.archived = self.__parseMessageDirectory(
+                self.path / "archived_threads"
+            ) + self.__parseMessageDirectory(self.path / "filtered_threads")
+            self.inbox = self.__parseMessageDirectory(
+                self.path / "e2ee_cutover"
+            ) + self.__parseMessageDirectory(self.path / "inbox")
+    
+        @staticmethod
+        def __parseMessageDirectory(subdir):
             result = []
-            convoLinkRegex = r"(http|ftp|https):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])"
-            convoLinkFilter = [
-                "meet.google.com",
-                "zoom.us",
-                "us05web.zoom.us",
-                "us04web.zoom.us",
-            ]  # this links are used for online class, as such, does not serve any useful purpose
-            for i in self.messages:
-                if "content" not in i:
-                    continue
-                URL = re.findall(convoLinkRegex, i["content"])
-                if URL == []:
-                    continue
-                for x in URL:
-                    if x[1] in convoLinkFilter:
-                        continue
-                    result.append(f"{x[0]}://{x[1]}{x[2]}")
+            for i in subdir.iterdir():
+                name = "_".join(i.name.split("_")[:-1])
+                if name == "":
+                    name = i.name
+                result.append(ItemTemplates.Conversation(subdir / i))
             return result
 
-        def __repr__(self):
-            return f"Conversation({self.name})"
-
-    class FacebookJSONDecoder(json.JSONDecoder):
-        def __init__(self, *args, **kwargs):
-            json.JSONDecoder.__init__(
-                self, object_hook=self.object_hook, *args, **kwargs
-            )
-
-        def object_hook(self, obj):
-            for key, value in obj.items():
-                if isinstance(value, str):  # fix the mojibake
-                    obj[key] = value.encode("latin1").decode("utf-8")
-                elif key == "timestamp_ms":
-                    obj[key] = datetime.datetime.fromtimestamp(value / 1000)
-            return obj
+class FacebookData: 
+    errorCode = 0  # TODO: documentation definitions
+    rootPath = ''
+    def __init__(self, path):
+        # TODO: setup logging
+        # there MUST be atleast your_facebook_data inside this folder
+        self.rootPath = Path(path) # TODO: sanitycheck pls
+        self.Metadata = Structures.Metadata(self.rootPath)
+        self.Messages = Structures.Messages(self.rootPath)
 
 
-class FacebookData(Template.Folders):
-    identity = ""  # should be / but weird stuffs happens in Template.Folders.__init__.pathdefinitions
+# Engine Version 1.0.0
+# class Template:
+#     class Folders:
+#         def __init__(self, logIdentity, *args, **kwargs):
+#             # path definitions
+#             self.path = self.Parent.rootPath / self.identity
+#             if not self.path.is_dir():
+#                 raise NotADirectoryError(
+#                     self.path, "Path given either does not exist or is a file."
+#                 )
+#             self._setupLogHandlers(logIdentity)
 
-    def __init__(self, root, *args, **kwargs):
-        self.Parent = self
-        self.rootPath = root
-        # argument parsings
-        self.options = {
-            "log": logging.INFO,
-        }
-        self.options.update(kwargs)
-        self._setup_logger()
-        super().__init__("FacebookData", *args, **kwargs)
-        self.logger.addHandler(self.Parent.logstreamer)
-        self.logger.debug("Logging Initialized")
+#         def _setupLogHandlers(self, name):
+#             self.logger = logging.getLogger(name)
+#             self.Parent.logstreamer.setFormatter(self.Parent.logformatter)
 
-        self.Activity = FacebookActivity(self)
-        self.logger.debug("FacebookData initialized")
+#             self.logger.setLevel(self.Parent.options["log"])
+#             self.Parent.logstreamer.setLevel(self.Parent.options["log"])
 
-    def _setup_logger(self):
-        self.logstreamer = logging.StreamHandler()
-        self.logformatter = logging.Formatter("%(levelname)s: %(name)s - %(message)s")
+#         def __repr__(self):
+#             return f"FacebookData(/{self.identity})"
+
+#     class Conversation(Folders):
+#         def __init__(self, path, name, parent):
+#             self.Parent = parent
+#             self._setupLogHandlers("FacebookData.Activity.Messages.%s" % name)
+#             self.path = path
+#             self.internalName = name
+#             self.audios = self.__getFiles(self.path / "audio")
+#             self.files = self.__getFiles(self.path / "files")
+#             self.gifs = self.__getFiles(self.path / "gifs")
+#             self.photos = self.__getFiles(self.path / "photos")
+#             self.videos = self.__getFiles(self.path / "videos")
+#             self.jsonRaw = self.interpretJSONs(
+#                 tuple(
+#                     self.path.glob("message_*.json"),
+#                 )
+#             )
+            
+#             # flags
+#             self.participants = []
+#             for _ in self.jsonRaw["participants"]:
+#                 self.participants.append(_["name"])
+#             self.isGroupChat = True if len(self.participants) >= 3 else False
+#             self.name = (
+#                 self.jsonRaw["title"]
+#                 if self.jsonRaw["title"] != ""
+#                 else self.internalName
+#             )
+#             self.messages = self.jsonRaw["messages"]
+#             self.convoLinks = self.__extractURL()
+#             self.logger.debug("Conversation with %s initialized", name)
+
+#         def interpretJSONs(self, jsonpath):
+#             with jsonpath[0].open(mode="rb") as jsondata:
+#                 data = json.loads(jsondata.read(), cls=Template.FacebookJSONDecoder)
+#             if len(jsonpath) >= 2:
+#                 for i in jsonpath[1:]:
+#                     with i.open(mode="rb") as jsondata:
+#                         adddata = json.loads(
+#                             jsondata.read(), cls=Template.FacebookJSONDecoder
+#                         )
+#                         data["messages"] += adddata["messages"]
+#             return data
+
+#         def __getFiles(self, path):
+#             return list(path.glob("*")) if path.is_dir() else None
+
+#         def __extractURL(self):
+#             result = []
+#             convoLinkRegex = r"(http|ftp|https):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])"
+#             convoLinkFilter = [
+#                 "meet.google.com",
+#                 "zoom.us",
+#                 "us05web.zoom.us",
+#                 "us04web.zoom.us",
+#             ]  # this links are used for online class, as such, does not serve any useful purpose
+#             for i in self.messages:
+#                 if "content" not in i:
+#                     continue
+#                 URL = re.findall(convoLinkRegex, i["content"])
+#                 if URL == []:
+#                     continue
+#                 for x in URL:
+#                     if x[1] in convoLinkFilter:
+#                         continue
+#                     result.append(f"{x[0]}://{x[1]}{x[2]}")
+#             return result
+
+#         def __repr__(self):
+#             return f"Conversation({self.name})"
+
+#     class FacebookJSONDecoder(json.JSONDecoder):
+#         def __init__(self, *args, **kwargs):
+#             json.JSONDecoder.__init__(
+#                 self, object_hook=self.object_hook, *args, **kwargs
+#             )
+
+#         def object_hook(self, obj):
+#             for key, value in obj.items():
+#                 if isinstance(value, str):  # fix the mojibake
+#                     obj[key] = value.encode("latin1").decode("utf-8")
+#                 elif key == "timestamp_ms":
+#                     obj[key] = datetime.datetime.fromtimestamp(value / 1000)
+#             return obj
 
 
-class FacebookActivity(Template.Folders):
-    identity = "your_facebook_activity"
+# class FacebookData(Template.Folders):
+#     identity = ""  # should be / but weird stuffs happens in Template.Folders.__init__.pathdefinitions
 
-    def __init__(self, parent):
-        self.Parent = parent
-        # breakpoint()
-        super().__init__("FacebookData.Activity")
+#     def __init__(self, root, *args, **kwargs):
+#         self.Parent = self
+#         self.rootPath = root
+#         # argument parsings
+#         self.options = {
+#             "log": logging.INFO,
+#         }
+#         self.options.update(kwargs)
+#         self._setup_logger()
+#         super().__init__("FacebookData", *args, **kwargs)
+#         self.logger.addHandler(self.Parent.logstreamer)
+#         self.logger.debug("Logging Initialized")
 
-        self.messages = Messages(parent)
-        self.logger.debug("Activity initialized from %s", self.path)
+#         self.Activity = FacebookActivity(self)
+#         self.logger.debug("FacebookData initialized")
 
-
-class Messages(Template.Folders):
-    identity = "your_facebook_activity/messages"
-
-    def __init__(self, parent):
-        self.Parent = parent
-        super().__init__("FacebookData.Activity.Messages")
-        # 2 types, archived, inbox
-        self.archived = self.__parseMessageDirectory(
-            "archived_threads"
-        ) + self.__parseMessageDirectory("filtered_threads")
-        self.inbox = self.__parseMessageDirectory(
-            "e2ee_cutover"
-        ) + self.__parseMessageDirectory("inbox")
-        self.logger.debug("MessageRoot initialized from %s", self.path)
-
-    def __parseMessageDirectory(self, subdir):
-        result = []
-        for i in (self.path / subdir).iterdir():
-            name = "_".join(i.name.split("_")[:-1])
-            if name == "":
-                name = i.name
-            result.append(Template.Conversation(i, name, self.Parent))
-        return result
+#     def _setup_logger(self):
+#         self.logstreamer = logging.StreamHandler()
+#         self.logformatter = logging.Formatter("%(levelname)s: %(name)s - %(message)s")
 
 
-class FacebookExceptions:
-    class InvalidDirectoryError(OSError):
-        def __init__(self, directory, message=""):
-            self.directory = directory
-            self.message = (
-                "Path given seems to be invalid, modified, or the wrong path"
-                if message == ""
-                else message
-            )
+# class FacebookActivity(Template.Folders):
+#     identity = "your_facebook_activity"
 
-        def __str__(self):
-            return f"{self.message} ({self.directory})"
+#     def __init__(self, parent):
+#         self.Parent = parent
+#         # breakpoint()
+#         super().__init__("FacebookData.Activity")
+
+#         self.messages = Messages(parent)
+#         self.logger.debug("Activity initialized from %s", self.path)
+
+
+# class Messages(Template.Folders):
+#     identity = "your_facebook_activity/messages"
+
+#     def __init__(self, parent):
+#         self.Parent = parent
+#         super().__init__("FacebookData.Activity.Messages")
+#         # 2 types, archived, inbox
+#         self.archived = self.__parseMessageDirectory(
+#             "archived_threads"
+#         ) + self.__parseMessageDirectory("filtered_threads")
+#         self.inbox = self.__parseMessageDirectory(
+#             "e2ee_cutover"
+#         ) + self.__parseMessageDirectory("inbox")
+#         self.logger.debug("MessageRoot initialized from %s", self.path)
+
+#     def __parseMessageDirectory(self, subdir):
+#         result = []
+#         for i in (self.path / subdir).iterdir():
+#             name = "_".join(i.name.split("_")[:-1])
+#             if name == "":
+#                 name = i.name
+#             result.append(Template.Conversation(i, name, self.Parent))
+#         return result
+
+
+# class FacebookExceptions:
+#     class InvalidDirectoryError(OSError):
+#         def __init__(self, directory, message=""):
+#             self.directory = directory
+#             self.message = (
+#                 "Path given seems to be invalid, modified, or the wrong path"
+#                 if message == ""
+#                 else message
+#             )
+
+#         def __str__(self):
+#             return f"{self.message} ({self.directory})"
 
 
 if __name__ == '__main__':
-    run(app, host='localhost', port=42069)
+    FacebookData(r'A:\Cache\bonnybonnybonaktan_data')
+    # run(app, host='localhost', port=42069)
