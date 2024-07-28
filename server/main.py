@@ -79,7 +79,7 @@ def api():
             Data = FacebookData(
                 clientRequest["path"]
             )  # we now have an entry point, now make it efficient
-            return returnData("setFilePath", code=0)
+            return returnData("setFilePath", data=Data)
 
 
 # Engine Version 1.1.0
@@ -100,17 +100,21 @@ class ItemTemplates:
         path: Path
         mediaType: str
 
-    class Conversation:
+    class Conversation(dict):
         path: Path
         name: str
+        id: int
         isGroupChat: bool
         isLoaded: bool
         Message: "ItemTemplates.ConvoMessage"
 
         def __init__(self, path):  # this shit slow as fuck
             self.path = path
+            self.id = int(path.name.split("_")[-1])
             convoData = list(self.path.glob("message_*.json"))
-            with convoData[0].open(mode="rb") as f:
+            dataCount = len(convoData)
+            lastData = convoData[dataCount-1] if dataCount < 10 else convoData[((dataCount//10)-1)*10 + (dataCount//10) + (dataCount%10)] # purpose: smallest file without resorting to io calls
+            with lastData.open(mode="rb") as f:
                 test = self.removeMessageJSON(f.read()) # f can reach up to 2mb on size
                 messageData = json.loads(
                     test, cls=Structures.JSONDecoder
@@ -119,7 +123,8 @@ class ItemTemplates:
                 messageData["title"] if messageData["title"] != "" else self.path.name
             )
             self.isGroupChat = True if len(messageData["participants"]) > 2 else False
-
+            dict.__init__(self, path=str(self.path), name=self.name, id=self.id, is_group_chat=self.isGroupChat)
+        
         @staticmethod
         def removeMessageJSON(jsonData):
             # this will assume that the json is well formed
@@ -131,7 +136,7 @@ class ItemTemplates:
             pos = -1
             isQuotes = False
             escape = False
-            for char in jsonData:  # pass1: parse only until a certain depth
+            for char in jsonData:
                 pos += 1
                 if escape:
                     escape = False
@@ -224,44 +229,48 @@ class ItemTemplates:
 
 
 class Structures:
-    class Metadata:
+    class Metadata(dict):
         path: Path
         def __init__(self, path):
             self.path = path
+            dict.__init__(self, path=str(self.path))
 
-    class Messages:
+    class Messages(dict):
         path = "your_facebook_activity/messages"
 
         def __init__(self, path):
             self.path = path / self.path
             
-            archived = self.__parseMessageDirectory(
+            self.archived = self.__parseMessageDirectory(
                 self.path / "archived_threads", 
                 self.path / "filtered_threads")
             self.inbox = self.__parseMessageDirectory(
                 self.path / "e2ee_cutover",
                 self.path / "inbox")
+            dict.__init__(self, path=str(self.path), archived_chats=self.archived, inbox=self.inbox)
 
         @staticmethod
         def __parseMessageDirectory(*subdirs):
-            result = []
+            result = {}
             for subdir in subdirs:
                 for i in subdir.iterdir():
                     name = "_".join(i.name.split("_")[:-1])
                     if name == "":
                         name = i.name
-                    result.append(ItemTemplates.Conversation(subdir / i))
+                    result[int(i.name.split("_")[-1])] = ItemTemplates.Conversation(subdir / i)
             return result
+
 
     class JSONDecoder(json.JSONDecoder):
         def __init__(self, *args, **kwargs):
             json.JSONDecoder.__init__(
-                self, object_pairs_hook=self.object_pairs_hook, *args, **kwargs
+                self, object_hook=self.object_hook, *args, **kwargs
             )
 
-        def object_pairs_hook(self, obj):
+        def object_hook(self, obj):
             result = {}
-            for key, value in obj:
+            for key in obj:
+                value = obj[key]
                 if isinstance(value, str):  # fix the mojibake
                     result[key] = value.encode("latin1").decode("utf-8")
                 elif key == "timestamp_ms":
@@ -271,7 +280,7 @@ class Structures:
             return result
 
 
-class FacebookData:
+class FacebookData(dict):
     errorCode = 0  # TODO: documentation definitions
     rootPath = ""
 
@@ -281,7 +290,13 @@ class FacebookData:
         self.rootPath = Path(path)  # TODO: sanitycheck pls
         self.Metadata = Structures.Metadata(self.rootPath)
         self.Messages = Structures.Messages(self.rootPath)
-
+        dict.__init__(self, rootPath=str(self.rootPath), Metadata=self.Metadata, Messages=self.Messages)
+    def to_json(self):
+        res = {}
+        res['rootPath'] = str(self.rootPath)
+        res['Metadata'] = self.Metadata
+        res['Messages'] = self.Messages
+        return res
 
 # Engine Version 1.0.0
 # class Template:
@@ -466,5 +481,5 @@ class FacebookData:
 
 
 if __name__ == "__main__":
-    FacebookData("A:/Cache/bonnybonnybonaktan_data")
-    # run(app, host='localhost', port=42069)
+    #print(json.dumps(FacebookData("A:/Cache/bonnybonnybonaktan_data"), indent=4))
+    run(app, host='localhost', port=42069)
