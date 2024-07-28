@@ -31,54 +31,70 @@ from pathlib import Path
 app = Bottle()
 Data = None
 
+
 def returnData(returnType, **retData):
-    retData['returnType'] = returnType # NOTE: shall be validated
+    retData["returnType"] = returnType  # NOTE: shall be validated
     return json.dumps(retData)
+
 def enable_cors(fn):
     def _enable_cors(*args, **kwargs):
         # set CORS headers
-        response.headers['Access-Control-Allow-Origin'] = '*' # WARNING: can be a security risk, please merge server and client asap
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token'
-        if request.method != 'OPTIONS':
+        response.headers["Access-Control-Allow-Origin"] = (
+            "*"  # WARNING: can be a security risk, please merge server and client asap
+        )
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
+        )
+        if request.method != "OPTIONS":
             return fn(*args, **kwargs)
     return _enable_cors
 
-@app.route('/')
+
+@app.route("/")
 def home():
-    return static_file('index.html', root='./build/')
+    return static_file("index.html", root="./build/")
 
-@app.route('/static/<filename:path>')
-def statics(filename): return static_file(filename, root='./build/static')
 
-@app.route('/api', method='POST')
+@app.route("/static/<filename:path>")
+def statics(filename):
+    return static_file(filename, root="./build/static")
+
+
+@app.route("/api", method="POST")
 @enable_cors
 def api():
     # maybe compensate for the cors * with an ip check????
     clientRequest = json.loads(request.body.read())
-    if clientRequest == {}: return returnData('communicationCheck', status=True)
-    match clientRequest['requestType']:
-        case 'setFilePath':
+    if clientRequest == {}:
+        return returnData("communicationCheck", status=True)
+    match clientRequest["requestType"]:
+        case "setFilePath":
             global Data
             if Data:
                 return returnData(returnType="error", code=-401)
-            clientRequest['path'] = Path(clientRequest['path'])
-            if not clientRequest['path'].exists():
+            clientRequest["path"] = Path(clientRequest["path"])
+            if not clientRequest["path"].exists():
                 return returnData(returnType="error", code=-201)
-            Data = FacebookData(clientRequest['path']) # we now have an entry point, now make it efficient
-            return returnData('setFilePath', code=0)
-    # Main Engine Entry = FacebookData(Path(path_to_rootfolder))
+            Data = FacebookData(
+                clientRequest["path"]
+            )  # we now have an entry point, now make it efficient
+            return returnData("setFilePath", code=0)
+
 
 # Engine Version 1.1.0
 # Additions: Multiprocessing Support
 
 from dataclasses import dataclass  # noqa: E402
+from functools import partial  # noqa: E402
+
+
 class ItemTemplates:
     @dataclass
     class Data:
         path: Path
         # the rest tba
-    
+
     @dataclass
     class Media:
         path: Path
@@ -88,64 +104,181 @@ class ItemTemplates:
         path: Path
         name: str
         isGroupChat: bool
+        isLoaded: bool
         Message: "ItemTemplates.ConvoMessage"
-        def __init__(self, path):
-            print(path)
-        
+
+        def __init__(self, path):  # this shit slow as fuck
+            self.path = path
+            convoData = list(self.path.glob("message_*.json"))
+            with convoData[0].open(mode="rb") as f:
+                test = self.removeMessageJSON(f.read()) # f can reach up to 2mb on size
+                messageData = json.loads(
+                    test, cls=Structures.JSONDecoder
+                )
+            self.name = (
+                messageData["title"] if messageData["title"] != "" else self.path.name
+            )
+            self.isGroupChat = True if len(messageData["participants"]) > 2 else False
+
+        @staticmethod
+        def removeMessageJSON(jsonData):
+            # this will assume that the json is well formed
+            # this will also assume that messages is entry2 of the json
+            # it will tokenize shits
+            tokens = []
+            stack = []  # List[(flag, pos)]
+            depth = 1
+            pos = -1
+            isQuotes = False
+            escape = False
+            for char in jsonData:  # pass1: parse only until a certain depth
+                pos += 1
+                if escape:
+                    escape = False
+                    continue
+                match char:
+                    case 92:  # \
+                        escape = True
+                        continue
+                    case 34:  # "
+                        isQuotes = not isQuotes
+                    case 123:  # {
+                        if isQuotes:
+                            continue
+                        depth -= 1
+                        if depth == -1:
+                            stack.append(pos)
+                    case 125:  # }
+                        if isQuotes:
+                            continue
+                        depth += 1
+                        if depth == 0:
+                            stack.append(pos)
+                    case 91:  # [
+                        if isQuotes:
+                            continue
+                        depth -= 1
+                        if depth == -1:
+                            stack.append(pos)
+                    case 93:  # ]
+                        if isQuotes:
+                            continue
+                        depth += 1
+                        if depth == 0:
+                            stack.append(pos)
+                    case 40:  # (
+                        if isQuotes:
+                            continue
+                        depth -= 1
+                        if depth == -1:
+                            stack.append(pos)
+                    case 41:  # )
+                        if isQuotes:
+                            continue
+                        depth += 1
+                        if depth == 0:
+                            stack.append(pos)
+
+            isOpen = True
+            cache = [0, 0]
+            for i in stack:
+                if isOpen:
+                    cache[0] = i
+                else:
+                    cache[1] = i
+                    tokens.append((cache[0], cache[1]))
+                isOpen = not isOpen
+            messageStart, messageEnd = tokens[1]
+            return (
+                jsonData[:messageStart]
+                + b'"Trimmed for efficiency"'
+                + jsonData[messageEnd + 1 :]
+            )
+
+        def __repr__(self):
+            return f"Conversation({self.name})"
+
         def load(self):
-            raise NotImplementedError('To be Done')
+            raise NotImplementedError("To be Done")
+            self.isLoaded = True
 
     @dataclass
-    class ConvoMessage: # this will be a linked list, btw
+    class ConvoMessage:  # this will be a linked list, btw
         isMedia: bool
         _prevMessage: "ItemTemplates.ConvoMessage"
         _nextMessage: "ItemTemplates.ConvoMessage"
         time: datetime
 
         @property
-        def prevMessage(self): return self._prevMessage
+        def prevMessage(self):
+            return self._prevMessage
+
         @property
-        def nextMessage(self): return self._nextMessage
+        def nextMessage(self):
+            return self._nextMessage
+
         @nextMessage.setter
         def nextMessage(self, message):
             # NOTE: sanitycheck, natamad pa ko iimplement :3
             self._nextMessage = message
-    
+
+
 class Structures:
     class Metadata:
         path: Path
         def __init__(self, path):
             self.path = path
+
     class Messages:
-        path = 'your_facebook_activity/messages'
+        path = "your_facebook_activity/messages"
+
         def __init__(self, path):
             self.path = path / self.path
-            print(self.path)
-
-            self.archived = self.__parseMessageDirectory(
-                self.path / "archived_threads"
-            ) + self.__parseMessageDirectory(self.path / "filtered_threads")
+            
+            archived = self.__parseMessageDirectory(
+                self.path / "archived_threads", 
+                self.path / "filtered_threads")
             self.inbox = self.__parseMessageDirectory(
-                self.path / "e2ee_cutover"
-            ) + self.__parseMessageDirectory(self.path / "inbox")
-    
+                self.path / "e2ee_cutover",
+                self.path / "inbox")
+
         @staticmethod
-        def __parseMessageDirectory(subdir):
+        def __parseMessageDirectory(*subdirs):
             result = []
-            for i in subdir.iterdir():
-                name = "_".join(i.name.split("_")[:-1])
-                if name == "":
-                    name = i.name
-                result.append(ItemTemplates.Conversation(subdir / i))
+            for subdir in subdirs:
+                for i in subdir.iterdir():
+                    name = "_".join(i.name.split("_")[:-1])
+                    if name == "":
+                        name = i.name
+                    result.append(ItemTemplates.Conversation(subdir / i))
             return result
 
-class FacebookData: 
+    class JSONDecoder(json.JSONDecoder):
+        def __init__(self, *args, **kwargs):
+            json.JSONDecoder.__init__(
+                self, object_pairs_hook=self.object_pairs_hook, *args, **kwargs
+            )
+
+        def object_pairs_hook(self, obj):
+            result = {}
+            for key, value in obj:
+                if isinstance(value, str):  # fix the mojibake
+                    result[key] = value.encode("latin1").decode("utf-8")
+                elif key == "timestamp_ms":
+                    result[key] = datetime.datetime.fromtimestamp(value / 1000)
+                else:
+                    result[key] = value
+            return result
+
+
+class FacebookData:
     errorCode = 0  # TODO: documentation definitions
-    rootPath = ''
+    rootPath = ""
+
     def __init__(self, path):
         # TODO: setup logging
         # there MUST be atleast your_facebook_data inside this folder
-        self.rootPath = Path(path) # TODO: sanitycheck pls
+        self.rootPath = Path(path)  # TODO: sanitycheck pls
         self.Metadata = Structures.Metadata(self.rootPath)
         self.Messages = Structures.Messages(self.rootPath)
 
@@ -188,7 +321,7 @@ class FacebookData:
 #                     self.path.glob("message_*.json"),
 #                 )
 #             )
-            
+
 #             # flags
 #             self.participants = []
 #             for _ in self.jsonRaw["participants"]:
@@ -332,6 +465,6 @@ class FacebookData:
 #             return f"{self.message} ({self.directory})"
 
 
-if __name__ == '__main__':
-    FacebookData(r'A:\Cache\bonnybonnybonaktan_data')
+if __name__ == "__main__":
+    FacebookData("A:/Cache/bonnybonnybonaktan_data")
     # run(app, host='localhost', port=42069)
