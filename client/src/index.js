@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
-import {FacebookJSONInterpreter} from './ui/main.jsx';
+import FacebookJSONInterpreter from './ui/main.jsx';
 import {GlobalVariableProvider} from './globals/globalVariables.js'
 import './globals/index.css';
 

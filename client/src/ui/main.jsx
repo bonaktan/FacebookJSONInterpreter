@@ -1,27 +1,28 @@
-import React, {useContext} from 'react';
-import GlobalVariables from '../globals/globalVariables';
+import React from "react";
+import { BrowserRouter, Routes, Route, Outlet, Link } from "react-router-dom";
 
-function FacebookJSONInterpreter() {
-    // make them talk first dumbass
-    const Globals = useContext(GlobalVariables)
-    const {apiSendRequest, apiReturnData, apiInProgress, requestData} = Globals
-    function setPath(event) {
-        event.preventDefault()
-        apiSendRequest({"requestType": "setFilePath", "path": event.target[0].value})
-        console.debug(requestData)
-    } 
+import FolderFetch from './Home/FolderFetch'
+import Messages from "./Messages/main";
+export default function FacebookJSONInterpreter() {
     return (
-        <>
-            <p>Due to security/compatibility restrictions browsers placed on us, we cannot show a directory picker at this moment.</p>
-            <p>Please type the full directory of the UNCOMPRESSED Facebook Data you downloaded</p>
-            <form onSubmit={setPath} target='_blank'>
-                <input type='text'/>
-                <button type='submit'>Submit</button>
-            </form>
-            <p>{apiInProgress}</p>
-            <p>{JSON.stringify(apiReturnData)}</p>
-        </>
+        <BrowserRouter>
+            <Routes>
+                <Route path='/' element={<Header />}>
+                    <Route index element={<FolderFetch />} />
+                    <Route path='messages' element={<Messages />} />
+                </Route>
+            </Routes>
+        </BrowserRouter>
     );
 }
 
-export {FacebookJSONInterpreter};
+const Header = () => { return (
+    <>
+        <div>
+            <div><p>Facebook JSON Interpreter</p></div>
+            <div><p>Made By: bonnybonnybonaktan</p></div>
+        </div>
+        <br />
+        <Outlet />
+    </>
+)}

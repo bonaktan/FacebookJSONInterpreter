@@ -64,13 +64,13 @@ def statics(filename):
 @app.route("/api", method="POST")
 @enable_cors
 def api():
+    global Data
     # maybe compensate for the cors * with an ip check????
     clientRequest = json.loads(request.body.read())
     if clientRequest == {}:
         return returnData("communicationCheck", status=True)
     match clientRequest["requestType"]:
         case "setFilePath":
-            global Data
             if Data:
                 return returnData(returnType="error", code=-401)
             clientRequest["path"] = Path(clientRequest["path"])
@@ -79,7 +79,7 @@ def api():
             Data = FacebookData(
                 clientRequest["path"]
             )  # we now have an entry point, now make it efficient
-            return returnData("setFilePath", data=Data)
+            return returnData(returnType="setFilePath", code=FacebookData.errorCode, data=Data)
 
 
 # Engine Version 1.1.0
