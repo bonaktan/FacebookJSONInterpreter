@@ -20,20 +20,8 @@
 
 # this is all 1 file instead of a whole directory since i plan to literally merge EVERYTHING after compilation for release :3
 # HINDSIGHT: haha nakakatamad :)
-def clientSide():
-    from bottle import Bottle, static_file, run
 
-    lookupTable = {} # only filled up during build,. its too fucking expensive.
-
-    clientSide = Bottle()
-    @clientSide.route('/', method='GET')
-    def index(): return static_file('index.html', root='./')
-    @clientSide.route('/<filename:path>', method='GET')
-    def files(filename):
-        return static_file(filename, root='./')
-    run(clientSide, host='localhost', port=3000)
-
-def apiSide():
+def apiSide(): #!!!build-start-parse
     from bottle import Bottle, static_file, request, run, response
     import json
     import datetime
@@ -63,7 +51,7 @@ def apiSide():
 
     @apiSide.route("/static/<filename:path>")
     def statics(filename):
-        nonlocal Data
+        nonlocal Data 
         return static_file(filename, root=Data.rootPath)
 
     @apiSide.route('/api', method='OPTIONS')
@@ -73,7 +61,7 @@ def apiSide():
     @apiSide.route("/api", method="POST")
     @enable_cors
     def api():
-        nonlocal Data
+        nonlocal Data 
         # maybe compensate for the cors * with an ip check????
         clientRequest = json.loads(request.body.read())
         if clientRequest == {}:
@@ -93,7 +81,8 @@ def apiSide():
                 return returnData(returnType='getStructure', code=FacebookData.errorCode, data=Data)
             case 'loadConversation':
                 if not Data.Messages.inbox[int(clientRequest['chatId'])].isLoaded:
-                    if Data.Messages.inbox[int(clientRequest['chatId'])].load() != 0: raise Exception
+                    if Data.Messages.inbox[int(clientRequest['chatId'])].load() != 0:
+                        raise Exception
                 return returnData(returnType='loadConversation', code=FacebookData.errorCode, data=Data.Messages.inbox[int(clientRequest['chatId'])].messageData)
 
 
@@ -316,17 +305,11 @@ def apiSide():
             res['Metadata'] = self.Metadata
             res['Messages'] = self.Messages
             return res
-
+    
     run(apiSide, host='localhost', port=42069)
+    #!!!build-end-parse
+    
 
 if __name__ == "__main__":
     apiSide()
 
-    # only run when built
-    # import multiprocessing 
-    # api = multiprocessing.Process(target=apiSide, args=()) 
-    # client = multiprocessing.Process(target=clientSide, args=()) 
-    # api.start()
-    # client.start()
-    # api.join()
-    # client.join()
