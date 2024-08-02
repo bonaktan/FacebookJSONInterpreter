@@ -39,7 +39,7 @@ function MessageBubble({message}) {
         bumped = 'Bumped by ';
     }
     if (message['sticker']) {
-        const name = message['sticker']['uri'].split('/').slice(-1);
+        const name = message['sticker']['uri'];
         return (
             <div>
                 <p className='senderName'>{bumped}{message['sender_name']}: {

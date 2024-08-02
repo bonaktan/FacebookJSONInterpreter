@@ -1,5 +1,6 @@
 import React, {useContext, useEffect, useState} from "react";
 import GlobalVariables from "../../globals/globalVariables";
+import { Link } from "react-router-dom"
 export default function Messages() {
     const Globals = useContext(GlobalVariables)
     const [data, setData] = useState({'Metadata': {'path': ''}, 'Messages': {'inbox': {}}})
@@ -24,7 +25,7 @@ export default function Messages() {
                 <div className='messages'>
                     <p>Messages</p>
                     {Object.entries(data['Messages']['inbox']).map(([convoId, convoData]) => {
-                        return <p key={convoId}><a href={'/messages/' + convoId}>{convoData['name']}</a></p>
+                        return <p key={convoId}><Link to={convoId}>{convoData['name']}</Link></p>
                     })}
                 </div>
             </>
