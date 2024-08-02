@@ -58,7 +58,9 @@ def home():
 
 @app.route("/static/<filename:path>")
 def statics(filename):
-    return static_file(filename, root="./build/static")
+    global Data
+    print(Data.rootPath/filename)
+    return static_file(filename, root=Data.rootPath)
 
 @app.route('/api', method='OPTIONS')
 @enable_cors
@@ -87,7 +89,9 @@ def api():
         case 'getStructure':
             return returnData(returnType='getStructure', code=FacebookData.errorCode, data=Data)
         case 'loadConversation':
-            return returnData(returnType='loadConversation', code=FacebookData.errorCode, data=clientRequest['chatId'])
+            if not Data.Messages.inbox[int(clientRequest['chatId'])].isLoaded:
+                if Data.Messages.inbox[int(clientRequest['chatId'])].load() != 0: raise Exception
+            return returnData(returnType='loadConversation', code=FacebookData.errorCode, data=Data.Messages.inbox[int(clientRequest['chatId'])].messageData)
 # Engine Version 1.1.0
 # Additions: Multiprocessing Support
 
@@ -129,8 +133,17 @@ class ItemTemplates:
                 messageData["title"] if messageData["title"] != "" else self.path.name
             )
             self.isGroupChat = True if len(messageData["participants"]) > 2 else False
+            self.isLoaded = False
             dict.__init__(self, path=str(self.path), name=self.name, id=self.id, is_group_chat=self.isGroupChat)
         
+        def load(self):
+            for i in range(1, len(list(self.path.glob("message_*.json")))+1):
+                with (self.path / f'message_{i}.json').open(mode='rb') as f: # BUG: only saves message_n, not n-1-1
+                    self.messageData = json.loads( 
+                        f.read(), cls=Structures.JSONDecoder
+                    )
+            self.isLoaded = True
+            return 0
         @staticmethod
         def removeMessageJSON(jsonData):
             # this will assume that the json is well formed
@@ -205,13 +218,10 @@ class ItemTemplates:
                 + b'"Trimmed for efficiency"'
                 + jsonData[messageEnd + 1 :]
             )
-
+        
         def __repr__(self):
             return f"Conversation({self.name})"
 
-        def load(self):
-            raise NotImplementedError("To be Done")
-            self.isLoaded = True
 
     @dataclass
     class ConvoMessage:  # this will be a linked list, btw
@@ -279,8 +289,8 @@ class Structures:
                 value = obj[key]
                 if isinstance(value, str):  # fix the mojibake
                     result[key] = value.encode("latin1").decode("utf-8")
-                elif key == "timestamp_ms":
-                    result[key] = datetime.datetime.fromtimestamp(value / 1000)
+                # elif key == "timestamp_ms":
+                #     result[key] = datetime.datetime.fromtimestamp(value / 1000)
                 else:
                     result[key] = value
             return result
@@ -487,5 +497,7 @@ class FacebookData(dict):
 
 
 if __name__ == "__main__":
-    #print(json.dumps(FacebookData("A:/Cache/bonnybonnybonaktan_data"), indent=4))
+    # data = FacebookData("A:\Cache\Facebook-bonnybonnybonaktan01_acad")
+    # for key in data.Messages.inbox:
+    #     print(data.Messages.inbox[key].load(), data.Messages.inbox[key].messageData)
     run(app, host='localhost', port=42069)
