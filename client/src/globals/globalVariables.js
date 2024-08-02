@@ -1,6 +1,5 @@
 import React, { createContext} from "react";
-
-import useAPI from '../api/apiMain.js'
+import axios from "axios";
 
 
 const GlobalVariables = createContext()
@@ -9,10 +8,11 @@ const GlobalVariables = createContext()
  * Enables Global Variable sharing across the Site, Also shares the API Calls/Responses needed
 */
 export function GlobalVariableProvider({children}) {
-    const {sendRequest, returnData, inProgress, requestData} = useAPI()
-    
+    const API = axios.create({
+        baseURL: "http://127.0.0.1:42069/api" 
+    });
     const Globals = {
-        apiSendRequest: sendRequest, apiReturnData: returnData, apiInProgress: inProgress, requestData
+        API
     }
     return (
         <GlobalVariables.Provider value={Globals}>

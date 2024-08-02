@@ -42,7 +42,7 @@ def enable_cors(fn):
         response.headers["Access-Control-Allow-Origin"] = (
             "*"  # WARNING: can be a security risk, please merge server and client asap
         )
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = (
             "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
         )
@@ -59,6 +59,10 @@ def home():
 @app.route("/static/<filename:path>")
 def statics(filename):
     return static_file(filename, root="./build/static")
+
+@app.route('/api', method='OPTIONS')
+@enable_cors
+def apiOptions(): pass
 
 
 @app.route("/api", method="POST")
@@ -79,9 +83,11 @@ def api():
             Data = FacebookData(
                 clientRequest["path"]
             )  # we now have an entry point, now make it efficient
-            return returnData(returnType="setFilePath", code=FacebookData.errorCode, data=Data)
-
-
+            return returnData(returnType="setFilePath", code=FacebookData.errorCode)
+        case 'getStructure':
+            return returnData(returnType='getStructure', code=FacebookData.errorCode, data=Data)
+        case 'loadConversation':
+            return returnData(returnType='loadConversation', code=FacebookData.errorCode, data=clientRequest['chatId'])
 # Engine Version 1.1.0
 # Additions: Multiprocessing Support
 
