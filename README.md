@@ -1,12 +1,8 @@
-# Facebook JSON Interpreter
-## Requirements (Running)
+# Facebook JSON Interpreter v2 Beta
+the goal is to make it fucking fast
+## Requirements
 - Python3 (3.12 is guaranteed to work, other versions is questionnable at best)
-- Bottle (pip install bottle) 
 
-## Requirements (building from source)
-- Python3
-- NodeJS
-- Bottle
 
 ## Milestones
 - [x] Establish comms between Server and Client
