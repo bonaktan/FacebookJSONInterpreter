@@ -5,9 +5,4 @@ the goal is to make it fucking fast
 
 
 ## Milestones
-- [x] Establish comms between Server and Client
-- [x] Build Logic for Server-Side JSON Interpretation
-- [ ] Build UI for Client-Side
-- [x] Build API for Server-Client
-- [x] Merge Server and Client to 1 python script
-
+- [ ] convert this app to a console-only variant
