@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ thread.title or thread.thread_path }} — Archive{% endblock %}
+
+{% block content %}
+<div class="thread-head">
+    <a href="/" class="back-link">← All conversations</a>
+    <h1>{{ thread.title or thread.thread_path }}</h1>
+    <div class="thread-meta">
+        <span class="thread-tag tag-{{ thread.category }}">{{ thread.category.replace('_', ' ') }}</span>
+        <span class="muted">{{ participants | join(', ') }}</span>
+        <span class="muted">· {{ total }} message{{ 's' if total != 1 else '' }}</span>
+    </div>
+</div>
+
+{% macro pager() %}
+{% if total_pages > 1 %}
+<nav class="pager">
+    {% if page > 1 %}
+        <a href="/thread/{{ thread.thread_path }}?page={{ page - 1 }}" class="pager-btn">← Prev</a>
+    {% else %}
+        <span class="pager-btn disabled">← Prev</span>
+    {% endif %}
+
+    <span class="pager-status">Page {{ page }} of {{ total_pages }}</span>
+
+    {% if page < total_pages %}
+        <a href="/thread/{{ thread.thread_path }}?page={{ page + 1 }}" class="pager-btn">Next →</a>
+    {% else %}
+        <span class="pager-btn disabled">Next →</span>
+    {% endif %}
+</nav>
+{% endif %}
+{% endmacro %}
+
+{{ pager() }}
+
+<div class="conversation">
+    {% for m in messages %}
+    <div class="msg-row {{ 'mine' if m.is_owner else 'theirs' }}">
+        {% if not m.is_owner %}
+        <div class="avatar" style="--seed: {{ m.sender_name | length }}">{{ m.sender_name | initials }}</div>
+        {% endif %}
+        <div class="bubble-stack">
+            {% if not m.is_owner %}<div class="sender-name">{{ m.sender_name }}</div>{% endif %}
+
+            {% if m.content %}
+            <div class="bubble {{ 'unsent' if m.is_unsent else '' }}">
+                {% if m.is_unsent %}<em>This message was unsent.</em>{% else %}{{ m.content }}{% endif %}
+            </div>
+            {% endif %}
+
+            {% if m.call_duration or m.missed %}
+            <div class="bubble system">
+                {% if m.missed %}Missed call{% else %}Call · {{ (m.call_duration // 60) }}m {{ (m.call_duration % 60) }}s{% endif %}
+            </div>
+            {% endif %}
+
+            {% if m.share %}
+            <div class="bubble share">
+                {% if m.share.share_text %}<div>{{ m.share.share_text }}</div>{% endif %}
+                {% if m.share.link %}<a href="{{ m.share.link }}" target="_blank" rel="noopener">{{ m.share.link }}</a>{% endif %}
+            </div>
+            {% endif %}
+
+            {% for a in m.attachments %}
+            <div class="bubble attachment">
+                <span class="attachment-kind">{{ a.kind }}</span>
+                <span class="attachment-uri">{{ a.uri }}</span>
+            </div>
+            {% endfor %}
+
+            {% if m.reactions %}
+            <div class="reactions">
+                {% for r in m.reactions %}<span class="reaction" title="{{ r.actor }}">{{ r.reaction }}</span>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="timestamp">{{ m.timestamp_ms | fmt_ts }}</div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{{ pager() }}
+{% endblock %}

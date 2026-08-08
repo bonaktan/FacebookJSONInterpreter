@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Conversations — Archive{% endblock %}
+
+{% block content %}
+{% if import_summary %}
+<div class="import-banner">✓ {{ import_summary }}</div>
+{% endif %}
+
+<div class="list-head">
+    <h1>Conversations</h1>
+    <form class="search" method="get" action="/">
+        <input type="text" name="q" value="{{ q }}" placeholder="Search title or thread path…">
+        <button type="submit">Search</button>
+    </form>
+    <div class="count-line">{{ total }} thread{{ 's' if total != 1 else '' }}</div>
+</div>
+
+{% if threads|length == 0 %}
+<div class="empty">No conversations found{% if q %} for “{{ q }}”{% endif %}.</div>
+{% endif %}
+
+<ul class="thread-list">
+    {% for t in threads %}
+    <li class="thread-row">
+        <a href="/thread/{{ t.thread_path }}" class="thread-link">
+            <div class="thread-main">
+                <span class="thread-title">{{ t.title or t.thread_path }}</span>
+                <span class="thread-tag tag-{{ t.category }}">{{ t.category.replace('_', ' ') }}</span>
+                {% if t.is_pending %}<span class="thread-tag tag-pending">pending</span>{% endif %}
+            </div>
+            <div class="thread-sub">
+                {% if t.participants %}
+                    {{ t.participants | join(', ') }}
+                {% else %}
+                    <span class="muted">no participants recorded</span>
+                {% endif %}
+            </div>
+        </a>
+        <div class="thread-count">{{ t.message_count }}<span class="count-label">msgs</span></div>
+    </li>
+    {% endfor %}
+</ul>
+
+{% if total_pages > 1 %}
+<nav class="pager">
+    {% if page > 1 %}
+        <a href="/?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}" class="pager-btn">← Prev</a>
+    {% else %}
+        <span class="pager-btn disabled">← Prev</span>
+    {% endif %}
+
+    <span class="pager-status">Page {{ page }} of {{ total_pages }}</span>
+
+    {% if page < total_pages %}
+        <a href="/?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}" class="pager-btn">Next →</a>
+    {% else %}
+        <span class="pager-btn disabled">Next →</span>
+    {% endif %}
+</nav>
+{% endif %}
+{% endblock %}

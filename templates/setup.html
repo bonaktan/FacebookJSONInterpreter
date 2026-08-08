@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Set up — Archive{% endblock %}
+
+{% block content %}
+<div class="setup">
+    <h1>Point me at your export</h1>
+    <p class="setup-lede">
+        Give me the path to the folder that contains <code>inbox/</code>,
+        <code>archived_threads/</code>, etc. I'll parse it into a local
+        SQLite database, then show you the conversations.
+    </p>
+
+    {% if error %}
+    <div class="setup-error">{{ error }}</div>
+    {% endif %}
+
+    <form class="setup-form" method="post" action="/setup">
+        <label for="export_path">Export folder path</label>
+        <input
+            type="text"
+            id="export_path"
+            name="export_path"
+            placeholder="/Users/you/Downloads/facebook-export"
+            autocomplete="off"
+            required
+        >
+
+        <label for="owner_name">Your name (as it appears in Messenger)</label>
+        <input
+            type="text"
+            id="owner_name"
+            name="owner_name"
+            placeholder="Jane Doe"
+            autocomplete="off"
+        >
+        <div class="setup-hint">Used to align your own messages on the right. Optional — leave blank to skip.</div>
+
+        <button type="submit">Parse and open archive</button>
+    </form>
+
+    <div class="setup-note">This can take a moment for large exports — the page will load once it's done.</div>
+</div>
+{% endblock %}
